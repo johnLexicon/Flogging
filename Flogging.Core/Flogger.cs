@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Configuration;
+using System.Data.SqlClient;
 using Serilog;
 using Serilog.Core;
 using Serilog.Events;
@@ -46,7 +47,47 @@ namespace Flogging.Core
 
         public static void WriteError(FlogDetail infoToLog)
         {
+            if(infoToLog.Exception != null)
+            {
+                var procName = FindProcName(infoToLog.Exception);
+                infoToLog.Location = String.IsNullOrEmpty(procName) ? infoToLog.Location : procName;
+                infoToLog.Message = GetMessageFromException(infoToLog.Exception);
+            }
+
             _errorLogger.Write(LogEventLevel.Information, "{@FlogDetail}", infoToLog);
+        }
+
+        private static string GetMessageFromException(Exception exception)
+        {
+            if(exception.InnerException != null)
+            {
+                return GetMessageFromException(exception.InnerException);
+            }
+            return exception.Message;
+        }
+
+        private static string FindProcName(Exception exception)
+        {
+            var sqlException = exception as SqlException;
+
+            if(sqlException != null)
+            {
+                var procName = sqlException.Procedure;
+                if (!string.IsNullOrEmpty(procName))
+                {
+                    return procName;
+                }
+            }
+
+            if (!string.IsNullOrEmpty((string)exception.Data["Procedure"]))
+            {
+                return (string) exception.Data["Procedure"];
+            }
+
+            if(exception.InnerException != null)
+            {
+                return FindProcName(exception.InnerException);
+            }
         }
 
         public static void WriteDiagnostic(FlogDetail infoToLog)
